@@ -6,7 +6,7 @@ import time
 import numpy as np
 import pygame
 
-from . import __version__, core, i18n, music, pictures, settings
+from . import WEB, __version__, core, i18n, music, pictures, settings
 from .device import ON_ANDROID
 from .audio import MIN_FLOOR, MicListener
 from .stages import CLEAR_RATIO, STAGES
@@ -33,6 +33,8 @@ MUSIC_VOLUME = 0.35         # music peaks at ~0.18 after this, well under the vo
 MUSIC_REWARM_S = 1.0        # let the clap detector re-learn the room once music starts
 MENU = ("start", "stage", "mic_check", "threshold", "stress_mode", "word_cards", "language",
         "voice", "music", "metronome", "quit")
+if WEB:  # a web page has nothing to quit to
+    MENU = MENU[:-1]
 THRESHOLD_MIN, THRESHOLD_MAX = 1.3, 3.0
 # Mic check timeline, in beats: 2 lead-in, a spoken 4 count, then 8 claps.
 CAL_COUNT_FROM, CAL_CLAP_FROM, CAL_CLAPS = 2, 6, 8
@@ -152,9 +154,30 @@ class Game:
             self.music_channel.set_volume(MUSIC_VOLUME)
         self.voice = Voice()
 
+        # Touch screens in a browser: say "tap" instead of "press SPACE".
+        self.touch = False
+        if WEB:
+            try:
+                import platform  # pygbag's bridge to the page
+                self.touch = int(platform.window.navigator.maxTouchPoints) > 0
+            except Exception:  # noqa: BLE001
+                self.touch = False
+        # ...and an Esc button beside the game: during a stage every tap is a clap (webkeys.py).
+        self.webkeys = None
+        if WEB and self.touch:
+            try:
+                from .webkeys import WebKeys
+                self.webkeys = WebKeys(keys=["Escape"], keyboard=False)
+            except Exception:  # noqa: BLE001
+                self.webkeys = None
         self.mic = MicListener(device=device)
         self.mic.detector.ratio = saved["threshold"]
-        self.mic.start()
+        if WEB:
+            # A browser page can't reach the microphone from Python: tap (or press Space) to clap,
+            # exactly as on a computer without a microphone.
+            self.mic.error = "browser"
+        else:
+            self.mic.start()
 
     def save_settings(self):
         settings.save({"lang": self.lang, "voice_on": self.voice_on, "music_on": self.music_on,
@@ -190,19 +213,35 @@ class Game:
 
     # ---------- main loop ----------
 
+    def frame(self):
+        if self.webkeys:
+            self.webkeys.poll()
+        for event in pygame.event.get():
+            self.handle_event(event)
+        if WEB and self.state == "quit":  # a web page has nothing to quit to
+            self.state = "menu"
+        getattr(self, f"update_{self.state}", lambda: None)()
+        if self.state == "quit":
+            return
+        self.screen.fill(BG)
+        self.buttons = []
+        getattr(self, f"draw_{self.state}")()
+        pygame.display.flip()
+        self.clock.tick(144)
+
+    async def run_web(self):
+        """Browser main loop: hands control back to the page after every frame."""
+        import asyncio
+        while True:  # closing the tab ends the game
+            if self.screen.get_size() != (W, H):
+                self.screen = pygame.display.set_mode((W, H))  # pygbag may resize the canvas
+            self.frame()
+            await asyncio.sleep(0)
+
     def run(self):
         try:
             while self.state != "quit":
-                for event in pygame.event.get():
-                    self.handle_event(event)
-                getattr(self, f"update_{self.state}", lambda: None)()
-                if self.state == "quit":
-                    break
-                self.screen.fill(BG)
-                self.buttons = []
-                getattr(self, f"draw_{self.state}")()
-                pygame.display.flip()
-                self.clock.tick(144)
+                self.frame()
         finally:
             self.save_settings()
             self.mic.stop()
@@ -368,6 +407,13 @@ class Game:
         self.state = "play"
 
     def stage_music(self):
+        if WEB and self.stage_index not in self._music_cache:
+            # Making a stage's music takes over a second even on a PC, so the web build ships it
+            # pre-made (tools/build_web.py writes web_music/stage<N>.ogg).
+            import os
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web_music",
+                                f"stage{self.stage_index}.ogg")
+            self._music_cache[self.stage_index] = pygame.mixer.Sound(path)
         if self.stage_index not in self._music_cache:
             rate, _, channels = pygame.mixer.get_init()
             pcm = (music.render(self.stage.song, rate) * 32767).astype(np.int16)
@@ -553,7 +599,7 @@ class Game:
     def draw_mic_meter(self, x, y, w=240, h=14, centered=False):
         det = self.mic.detector
         if self.mic.backend is None:
-            surf = self.ui_text(20, self.tr("no_mic_touch" if ON_ANDROID else "no_mic"), DIM)
+            surf = self.ui_text(20, self.tr("no_mic_touch" if ON_ANDROID or self.touch else "no_mic"), DIM)
             anchor = {"midtop": (x + w // 2, y)} if centered else {"topright": (x + w, y)}
             self.screen.blit(surf, surf.get_rect(**anchor))
             return
@@ -598,7 +644,7 @@ class Game:
             self.tr("music", state=self.tr("on" if self.music_on else "off")),
             self.tr("metronome", state=self.tr("on" if self.metronome else "off")),
             self.tr("quit"),
-        ]
+        ][:len(MENU)]   # no Quit in a browser
         for i, label in enumerate(items):
             sel = i == self.menu_index
             surf = self.ui_text(26, label, GOLD if sel else TEXT)

@@ -1,6 +1,5 @@
 """Pure game logic: timing windows, chart layout, scoring. No pygame/audio imports."""
 import math
-import statistics
 from dataclasses import dataclass, field
 
 from .words import stress_index
@@ -79,7 +78,7 @@ def stress_verdict(segment):
     soft = [t.level for t in hits if not t.stressed]
     if strong.result not in (PERFECT, GOOD) or not soft:
         return False
-    return strong.level >= STRESS_RATIO * statistics.median(soft)
+    return strong.level >= STRESS_RATIO * _median(soft)
 
 
 def build_chart(words, start_ms=BEAT_MS * BEATS_PER_BAR, rest_bars=0):
@@ -197,3 +196,10 @@ class Session:
         while (self._pending_from < len(self.targets)
                and self.targets[self._pending_from].result is not None):
             self._pending_from += 1
+
+
+def _median(values):
+    """statistics.median, without the statistics module (missing from the browser build's Python)."""
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2

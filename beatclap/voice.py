@@ -12,7 +12,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import wave
 
 import numpy as np
 
@@ -25,6 +24,8 @@ FADE_MS = 30
 
 
 def _read_wav(data):
+    import wave  # only for the system-voice fallback; the browser build's Python has no wave module
+
     with wave.open(io.BytesIO(data)) as w:
         sr, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
         raw = w.readframes(w.getnframes())

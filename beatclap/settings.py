@@ -27,11 +27,24 @@ def path():
     return os.path.join(base, "beat-clap", "settings.json")
 
 
+_WEB_KEY = "beat-clap/settings.json"   # browser: localStorage key (files vanish with the page)
+
+
+def _web():
+    from . import WEB
+    return WEB
+
+
 def load(file=None):
     out = dict(DEFAULTS)
     try:
-        with open(file or path(), encoding="utf-8") as f:
-            data = json.load(f)
+        if _web() and file is None:
+            import platform  # pygbag's bridge to the page
+            raw = platform.window.localStorage.getItem(_WEB_KEY)
+            data = json.loads(str(raw)) if raw else {}
+        else:
+            with open(file or path(), encoding="utf-8") as f:
+                data = json.load(f)
         for key, default in DEFAULTS.items():
             value = data.get(key)
             if isinstance(default, bool):
@@ -44,12 +57,19 @@ def load(file=None):
                 out[key] = type(default)(value)
         if out["lang"] not in ("en", "ja"):
             out["lang"] = DEFAULTS["lang"]
-    except (OSError, ValueError, AttributeError):
+    except Exception:  # noqa: BLE001 - damaged settings fall back to the defaults
         pass
     return out
 
 
 def save(values, file=None):
+    if _web() and file is None:
+        try:
+            import platform  # pygbag's bridge to the page
+            platform.window.localStorage.setItem(_WEB_KEY, json.dumps({k: values[k] for k in DEFAULTS if k in values}))
+        except Exception:  # noqa: BLE001
+            pass
+        return
     file = file or path()
     try:
         os.makedirs(os.path.dirname(file), exist_ok=True)

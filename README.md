@@ -35,6 +35,23 @@ fonts come from the system. The only asset is the bundled voice (see below).
 The interface switches between English and Japanese (press **L**, or use the
 menu). The words to clap always stay in English.
 
+## Play in the browser
+
+Beat Clap also runs in a web browser, on computers, phones and tablets, with nothing to install:
+<https://shoukugames.org/play/beat-clap/> (test page). The browser version can't use the
+microphone, so **tap the screen (or press Space) to clap**, right on the beat. On touch screens an
+Esc button beside the game leaves a stage. Settings are saved in the browser.
+
+```bash
+python3 -m pip install numpy pygame pygbag   # plus ffmpeg on PATH (or FFMPEG=/path/to/ffmpeg)
+python3 tools/build_web.py                   # -> build/web/: upload the folder as-is
+```
+
+The build renders each stage's music once into `web_music/` (too slow to do in a browser), then
+packs the game with [pygbag](https://pygame-web.github.io/). `main.py` is the web entry point; the
+browser-only parts (including `beatclap/webkeys.py`) switch on only in the browser. The `.apk` file
+pygbag writes is its bundle of game files, not the Android app.
+
 ## Install
 
 | Platform | Package | How |
