@@ -1,0 +1,14 @@
+{
+ "_note": "Replace identity_name, publisher and publisher_display_name with the values from Partner Center (Product management -> Product identity) before uploading to the Microsoft Store.",
+ "identity_name": "ShoukuGames.BeatClap",
+ "publisher": "CN=ShoukuGamesPlaceholder",
+ "publisher_display_name": "Shouku Games",
+ "display_name": "Beat Clap",
+ "description": "A rhythm game for practicing English syllables. Clap into your microphone, right on the beat.",
+ "file_name": "BeatClap",
+ "exe_name": "BeatClap.exe",
+ "alias": "shouku-beat-clap.exe",
+ "device_capabilities": [
+  "microphone"
+ ]
+}
